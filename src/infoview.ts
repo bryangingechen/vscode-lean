@@ -55,15 +55,22 @@ export class InfoProvider implements Disposable {
         this.updateStylesheet();
         this.subscriptions.push(
             this.server.allMessages.on(() => {
-                if (this.updateMessages()) { this.rerender(); }
+                console.log(Date());
+                console.log("calling updateMessages from allMessages!");
+                if (this.updateMessages()) { console.log("rerender from allMessages"); this.rerender(); }
+                console.log("end of allmessages");
             }),
             this.server.statusChanged.on(async () => {
                 if (this.displayMode === DisplayMode.OnlyState) {
-                    const changed = await this.updateGoal();
-                    if (changed) { this.rerender(); }
+                    console.log(Date());
+                    console.log("from statusChanged");
+                    const changed = await this.updateGoal("statusChanged");
+                    console.log(`statusChanged: ${changed}`);
+                    if (changed) { console.log("rerender from statusChanged"); this.rerender(); }
+                    console.log("end of statusChanged");
                 }
             }),
-            window.onDidChangeTextEditorSelection(() => this.updatePosition(false)),
+            window.onDidChangeTextEditorSelection(async () => await this.updatePosition(false)),
             workspace.onDidChangeConfiguration((e) => {
                 this.updateStylesheet();
                 this.rerender();
@@ -219,12 +226,18 @@ export class InfoProvider implements Disposable {
         if (!chPos && !forceRefresh) {
             return;
         }
-
+        console.log(Date());
+        console.log("calling updateMessages from updatePosition");
         const chMsg = this.updateMessages();
+        console.log(chMsg);
         switch (this.displayMode) {
         case DisplayMode.OnlyState:
-            const chGoal = await this.updateGoal();
+            console.log(Date());
+            console.log("calling updateGoal from updatePosition");
+            const chGoal = await this.updateGoal("updatePosition");
+            console.log(`updatePosition: ${chGoal}`);
             if (chPos || chGoal || chMsg) {
+                console.log("rerender from updatePosition onlystate");
                 this.rerender();
             } else if (forceRefresh) {
                 this.postMessage({ command: 'continue' });
@@ -233,12 +246,14 @@ export class InfoProvider implements Disposable {
 
         case DisplayMode.AllMessage:
             if (forceRefresh || chMsg) {
+                console.log("rerender from updatePosition allmessage");
                 this.rerender();
             } else {
                 this.sendPosition();
             }
             break;
         }
+        console.log("end of updateposition");
     }
 
     private updateMessages(): boolean {
@@ -283,6 +298,8 @@ export class InfoProvider implements Disposable {
         }
         if (!this.curMessages) {
             this.curMessages = msgs;
+            console.log(this.server.messages);
+            console.log("returning true from updateMessages; curMessages was falsy");
             return true;
         }
         const oldMsgs = this.curMessages;
@@ -294,27 +311,38 @@ export class InfoProvider implements Disposable {
                     break;
                 }
             }
-            if (eq) { return false; }
+            if (eq) {
+                console.log(this.server.messages);
+                console.log("returning false from updateMessages; compareMessages was True");
+                return false; }
         }
         this.curMessages = msgs;
+        console.log(this.server.messages);
+        console.log("returning true from updateMessages; got to the end");
         return true;
     }
 
-    private async updateGoal(): Promise<boolean> {
+    private async updateGoal(calledFrom : String): Promise<boolean> {
+        console.log(`updateGoal called from ${calledFrom}`);
         if (this.stopped) { return false; }
-
         const info = await this.server.info(
             this.curFileName, this.curPosition.line + 1, this.curPosition.character);
+        console.log(info);
         if (info.record && info.record.state) {
             if (this.curGoalState !== info.record.state) {
+                console.log(`setting from ${calledFrom}!`);
                 this.curGoalState = info.record.state;
                 return true;
             }
+            console.log("curGoalState = info.record.state");
         } else {
             if (this.curGoalState) {
+                console.log(`blanking from ${calledFrom}!!`);
                 this.curGoalState = null;
                 return false;
             }
+            console.log("not (info.record && info.record.state) and not (this.curGoalState)")
+            //return false;
         }
     }
 
@@ -362,6 +390,7 @@ export class InfoProvider implements Disposable {
     }
 
     private renderGoal() {
+        //console.log(this.curGoalState);
         if (!this.curGoalState || this.displayMode !== DisplayMode.OnlyState) { return ''; }
         return `<div id="goal"><h1>Tactic State</h1><pre>${
             this.colorizeMessage(this.curGoalState)}</pre></div>`;
